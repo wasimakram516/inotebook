@@ -11,7 +11,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 
 // Route 1: Create a user using POST: "/api/auth/createUser". No login Required
 router.post(
-  "/createUser",
+  "/createuser",
   [
     // Validation middleware to ensure that the request body contains valid data
     body("name", "Enter a valid name.").isLength({ min: 3 }),
@@ -67,7 +67,7 @@ router.post(
   }
 );
 
-// Route 3: Validate a user using POST: "/api/auth/login". No login Required
+// Route 2: Validate a user using POST: "/api/auth/login". No login Required
 router.post(
   "/login",
   [
@@ -117,7 +117,7 @@ router.post(
 );
 
 // Route 3: Get logged-in user details using POST: "/api/auth/getUser". Login Required
-router.post("/getUser", fetchUser, async (req, res) => {
+router.post("/getuser", fetchUser, async (req, res) => {
   try {
     const userID = req.user.id;
     const user = await User.findById(userID).select("-password");
