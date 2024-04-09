@@ -1,119 +1,71 @@
 const express = require("express");
 const fetchUser = require("../middleware/fetchUser");
-const router = express.Router();
 const Notes = require("../models/Notes");
 const { body, validationResult } = require("express-validator");
+const errorHandler = require("../utils/errorHandler");
 
-// Route 1: Add new notes using POST: "/api/notes/addnotes". Login Required
-router.post(
-  "/addnotes",
-  [
-    // Validation middleware to ensure that the request body contains valid data
-    body("title", "Enter a valid title.").isLength({ min: 3 }),
-    body("description", "Enter a valid description.").isLength({ min: 5 }),
-  ],
-  fetchUser,
-  async (req, res) => {
-    // Check for validation errors
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-    try {
-      const { title, description, tag } = req.body;
-      const notes = new Notes({
-        title,
-        description,
-        tag,
-        user: req.user.id,
-      });
-      const savedNotes = await notes.save();
-      res.json(savedNotes);
-    } catch (error) {
-      // Log and send server errors
-      console.error(error.message);
-      res.status(500).send("Server error");
-    }
+const router = express.Router();
+
+const noteValidationRules = [
+  body("title", "Enter a valid title.").isLength({ min: 1 }),
+  body("description", "Description must be at least 5 characters long.").isLength({ min: 1 }),
+];
+
+router.post("/addnotes", [noteValidationRules, fetchUser], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return errorHandler(res, 400, errors.array().map(err => err.msg).join('. '));
   }
-);
 
-// Route 2: Get all the notes using GET: "/api/notes/fetchallnotes". Login Required
+  try {
+    const { title, description, tag } = req.body;
+    const note = new Notes({ title, description, tag, user: req.user.id });
+    const savedNote = await note.save();
+    res.json(savedNote);
+  } catch (error) {
+    errorHandler(res, 500, "Failed to add note.");
+  }
+});
+
 router.get("/fetchallnotes", fetchUser, async (req, res) => {
   try {
     const notes = await Notes.find({ user: req.user.id });
     res.json(notes);
-    
   } catch (error) {
-    // Log and send server errors
-    console.error(error.message);
-    res.status(500).send("Server error");
+    errorHandler(res, 500, "Failed to fetch notes.");
   }
 });
 
-// Route 3: Update notes using PUT: "/api/notes/updatenotes/id". Login Required
-router.put(
-    "/updatenotes/:id",
-    [
-      // Validation middleware to ensure that the request body contains valid data
-      body("title", "Enter a valid title.").isLength({ min: 3 }),
-      body("description", "Enter a valid description.").isLength({ min: 5 }),
-    ],
-    fetchUser,
-    async (req, res) => {
-      // Check for validation errors
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
-      try {
-        const { title, description, tag } = req.body;
-        const updatedNotes={};
-        if (title) {updatedNotes.title=title};
-        if (description) {updatedNotes.description=description};
-        if (tag) {updatedNotes.tag=tag};
+router.put("/updatenotes/:id", [noteValidationRules, fetchUser], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return errorHandler(res, 400, errors.array().map(err => err.msg).join('. '));
+  }
 
-        let note= await Notes.findById(req.params.id);
-        if (!note) {
-            return res.status(404).send("Not Found!");
-        }
+  try {
+    const { title, description, tag } = req.body;
+    let note = await Notes.findById(req.params.id);
+    if (!note) return errorHandler(res, 404, "Note not found.");
+    if (note.user.toString() !== req.user.id) return errorHandler(res, 401, "Unauthorized.");
 
-        if (note.user.toString()!==req.user.id) {
-            return res.status(401).send("Un-authorized!");
-        }
+    const updatedNote = await Notes.findByIdAndUpdate(req.params.id, { $set: { title, description, tag }}, { new: true });
+    res.json(updatedNote);
+  } catch (error) {
+    errorHandler(res, 500, "Failed to update note.");
+  }
+});
 
-        note= await Notes.findByIdAndUpdate(req.params.id,{$set:updatedNotes},{new:true});
-        res.json(note);
-      } catch (error) {
-        // Log and send server errors
-        console.error(error.message);
-        res.status(500).send("Server error");
-      }
-    }
-  );
+router.delete("/deletenotes/:id", fetchUser, async (req, res) => {
+  try {
+    let note = await Notes.findById(req.params.id);
+    if (!note) return errorHandler(res, 404, "Note not found.");
+    if (note.user.toString() !== req.user.id) return errorHandler(res, 401, "Unauthorized.");
 
-  // Route 4: Delete notes using DELETE: "/api/notes/deletenotes/id". Login Required
-router.delete(
-    "/deletenotes/:id",
-    fetchUser,
-    async (req, res) => {
-      
-      try {
-        let note= await Notes.findById(req.params.id);
-        if (!note) {
-            return res.status(404).send("Not Found!");
-        }
+    await Notes.findByIdAndDelete(req.params.id);
+    res.json({ message: "Note deleted successfully." });
+  } catch (error) {
+    errorHandler(res, 500, "Failed to delete note.");
+  }
+});
 
-        if (note.user.toString()!==req.user.id) {
-            return res.status(401).send("Un-authorized!");
-        }
-
-        note= await Notes.findByIdAndDelete(req.params.id);
-        return res.json({"Success":"Deleted Successfully!"});
-      } catch (error) {
-        // Log and send server errors
-        console.error(error.message);
-        res.status(500).send("Server error");
-      }
-    }
-  );
 module.exports = router;
